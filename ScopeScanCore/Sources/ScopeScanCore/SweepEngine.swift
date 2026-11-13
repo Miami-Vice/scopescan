@@ -75,7 +75,7 @@ public struct SweepEngine: Sendable {
                 case .denied:
                     denied = true
                 case .skipped:
-                    cancelled = true
+                    break
                 }
 
                 progress(

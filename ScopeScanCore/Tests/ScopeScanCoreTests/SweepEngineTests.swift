@@ -85,6 +85,17 @@ final class SweepEngineTests: XCTestCase {
         XCTAssertLessThan(result.scannedHostCount, scope.hostCount)
     }
 
+    func testDenialIsNotReportedAsUserCancellation() async throws {
+        let scope = try ScanScope(cidr: "192.168.1.0/24")
+        let result = await SweepEngine(concurrency: 4).sweep(
+            scope: scope,
+            probe: { _, _ in .denied }
+        )
+
+        XCTAssertTrue(result.localNetworkDenied)
+        XCTAssertFalse(result.wasCancelled)
+    }
+
     func testConcurrencyIsBounded() async throws {
         let scope = try ScanScope(cidr: "192.168.1.0/24")
         let tracker = InFlightTracker()

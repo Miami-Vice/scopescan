@@ -163,7 +163,9 @@ struct ScanHomeView: View {
         Section {
             if report.localNetworkDenied {
                 Label {
-                    Text("Local Network access was denied. Allow it in Settings → Privacy & Security → Local Network, then scan again.")
+                    Text(report.hostsUp == 0
+                         ? "Local Network access was refused. Allow it in Settings → Privacy & Security → Local Network, then scan again."
+                         : "iOS refused some connections with a permission error, so the scan stopped early and is partial. Check Settings → Privacy & Security → Local Network.")
                         .font(.footnote)
                 } icon: {
                     Image(systemName: "hand.raised.fill")
