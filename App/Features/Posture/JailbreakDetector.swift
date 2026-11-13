@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import MachO
 
 /// Looks for evidence that this device's code-signing and sandbox guarantees
 /// have been removed.
