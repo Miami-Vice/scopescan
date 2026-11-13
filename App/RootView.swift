@@ -6,6 +6,9 @@ struct RootView: View {
             ScanHomeView()
                 .tabItem { Label("Scan", systemImage: "dot.radiowaves.left.and.right") }
 
+            PostureView()
+                .tabItem { Label("Posture", systemImage: "checkmark.shield") }
+
             DiagnosticsView()
                 .tabItem { Label("Diagnostics", systemImage: "stethoscope") }
         }
@@ -14,4 +17,5 @@ struct RootView: View {
 
 #Preview {
     RootView()
+        .environment(PostureStore())
 }

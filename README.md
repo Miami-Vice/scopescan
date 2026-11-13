@@ -9,12 +9,14 @@ It is *not* an exploit finder. Nothing running in an iOS sandbox can be — see
 
 ## Status
 
-M0 — scaffolding, CI pipeline, and the diagnostics harness. No scanning yet.
+M0 is complete and the app runs on hardware. M1's core rules are complete and
+unit-tested; the app-side collection and UI are built and awaiting on-device
+verification.
 
 | Milestone | Scope | State |
 |---|---|---|
-| M0 | Scaffold, `ScopeScanCore`, XcodeGen, CI, unsigned IPA, on-device install | in progress |
-| M1 | Posture checks + findings model | planned |
+| M0 | Scaffold, `ScopeScanCore`, XcodeGen, CI, unsigned IPA, on-device install | complete |
+| M1 | Posture checks + findings model | core complete, app layer in verification |
 | M2 | Scope validation, discovery, Bonjour enumeration | planned |
 | M3 | TLS grading, banner fingerprinting, remediation | planned |
 | M4 | Encrypted storage, redacted export, hardening | planned |
@@ -33,6 +35,9 @@ Worth being explicit, because these limits are architectural:
 - **Send ICMP.** No raw sockets, so no ping. Reachability is a TCP connect.
 - **Probe credentials.** Never implemented. Automated credential attempts
   against hosts you may not own is the line this project does not cross.
+- **Read the current Wi-Fi security type.** `NEHotspotNetwork.fetchCurrent`
+  needs `com.apple.developer.networking.wifi-info`, a restricted entitlement a
+  free personal team cannot be granted. The check reports *not determined*.
 
 ## Architecture
 
@@ -43,9 +48,15 @@ ScopeScanCore/          SwiftPM package, zero Apple-framework dependencies
     IPv4Network.swift   CIDR maths, host enumeration
     ScanScope.swift     the authorization enforcement point
     Finding.swift       finding model + severity ordering
+    Severity.swift      ordered info → critical
+    OSVersion.swift     semantic version, comparable
+    WifiSecurity.swift  reported link security
+    PostureObservation.swift  raw facts, every field optional
+    PostureEvaluator.swift    pure rules that turn facts into findings
   Tests/                runs with `swift test` on macOS **and Windows**
 
 App/                    SwiftUI app target (iOS 17+)
+  Features/Posture/     collector, detectors, store, report UI
   Features/Diagnostics/ the device-feedback harness
   Support/              getifaddrs, sysctl, NWConnection probing
 Tests/ScopeScanAppTests/
@@ -54,22 +65,35 @@ scripts/
   ci-destination.sh     picks a simulator for CI
   build-ipa.sh          local unsigned-IPA build (needs a Mac)
   test-core.ps1         local core tests on Windows
+  usbmux-diag.py        proves the USB device stack works before sideloading
   generate-icon.ps1     regenerates the app icon
 ```
 
 Anything that can be tested without Apple frameworks lives in `ScopeScanCore`,
 because CI-only development makes a fast local test loop worth a lot.
 
+A deliberate invariant runs through the posture layer: **an unknown observation
+never becomes a pass.** Every field in `PostureObservation` is optional, a check
+that cannot run produces no finding, and the UI lists it as *not determined*
+rather than omitting it. Absence of a warning is never evidence of safety.
+
 ## Why CI-only
 
 There is no Mac in the loop. The app is built on GitHub Actions and installed by
-re-signing an unsigned IPA on device:
+re-signing an unsigned IPA on device with **Sideloadly** over USB:
 
 1. `unsigned ipa` workflow produces `ScopeScan-unsigned.ipa`.
-2. Download it, open it in **AltStore** (AltServer running on the Windows box).
-3. AltStore signs with your free Apple ID and installs.
-4. Re-sign every 7 days. AltStore does this in the background while on the same
-   network as AltServer.
+2. Download it to the Windows box, start Sideloadly, and drag the IPA in.
+3. Sideloadly signs with your free Apple ID and installs over the same
+   usbmux channel Xcode would use.
+4. Re-sign every 7 days — a free Apple ID cannot issue longer-lived profiles.
+
+AltStore was tried first and abandoned: its device-to-server discovery relies on
+Apple's Bonjour service, and recovering a missing Bonjour without reinstalling
+the whole iTunes bundle is not reliable. Sideloadly removes that dependency
+entirely. `scripts/usbmux-diag.py` distinguishes "the phone is plugged in" from
+"the USB device stack works", which is the failure that otherwise looks
+identical.
 
 Consequences baked into the project:
 
@@ -82,6 +106,10 @@ Consequences baked into the project:
 - **The diagnostics screen is load-bearing.** CI can compile and unit-test, but
   only real hardware can confirm that `LAContext`, `sysctl`, `getifaddrs` and the
   local-network permission behave as expected. Copy the report off the device.
+- **Scope selection is constrained.** Only RFC1918 `en0` addresses are offered:
+  `pdp_ip0` carries carrier CGNAT and must never be scanned, and an active
+  `ipsec`/`utun` tunnel is surfaced as a warning because it can absorb traffic
+  the scanner believes is going to the LAN.
 
 ## Local development
 

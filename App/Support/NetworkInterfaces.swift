@@ -67,6 +67,33 @@ enum NetworkInterfaces {
             ?? interfaces.first { $0.isUp && !$0.address.hasPrefix("127.") }
     }
 
+    /// Whether a VPN tunnel is carrying traffic on this device.
+    ///
+    /// The system does not expose VPN status or the default route to a
+    /// sandboxed app, so this infers it from interface names. `ipsec*` and
+    /// `ppp*` only exist when a tunnel is configured. `utun*` exists on stock
+    /// devices too (Wi-Fi Calling, Private Relay), so it only counts when it
+    /// holds a routable address rather than the 169.254 self-assigned one.
+    ///
+    /// This is a warning signal for scope selection, not proof that LAN traffic
+    /// is being redirected.
+    static func hasActiveTunnel() -> Bool {
+        let dedicatedTunnelPrefixes = ["ipsec", "ppp"]
+
+        for interface in allIPv4() where interface.isUp {
+            if dedicatedTunnelPrefixes.contains(where: { interface.name.hasPrefix($0) }) {
+                return true
+            }
+            if interface.name.hasPrefix("utun"),
+               let address = IPv4Address(interface.address),
+               !address.isLinkLocal {
+                return true
+            }
+        }
+
+        return false
+    }
+
     /// Best-effort gateway guess: most consumer routers sit at the first host
     /// address of the /24 they hand out.
     static func gatewayGuess(for address: String) -> String? {
