@@ -1,0 +1,57 @@
+name: fuzz
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Nightly, longer budget. Corpus is cached between runs.
+    - cron: "23 4 * * *"
+  pull_request:
+    paths:
+      - "Fuzzing/**"
+      - "ScopeScanCore/**"
+      - ".github/workflows/fuzz.yml"
+
+concurrency:
+  group: fuzz-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  libfuzzer:
+    name: libFuzzer
+    # Linux is the supported host: its Swift toolchain ships the libFuzzer
+    # runtime that -sanitize=fuzzer links against.
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      # 60 s per target on pull requests, 10 minutes nightly.
+      FUZZ_SECONDS: ${{ github.event_name == 'schedule' && '600' || '60' }}
+      # Leak checking the Swift runtime produces noise unrelated to the parsers.
+      ASAN_OPTIONS: detect_leaks=0
+      UBSAN_OPTIONS: print_stacktrace=1
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Toolchain
+        run: swiftc --version
+
+      - name: Restore corpus
+        uses: actions/cache@v6
+        with:
+          path: Fuzzing/corpus
+          key: fuzz-corpus-v1-${{ github.run_id }}
+          restore-keys: fuzz-corpus-v1-
+
+      - name: Fuzz
+        run: bash Fuzzing/run-fuzzing.sh
+
+      - name: Upload findings
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuzz-findings
+          path: Fuzzing/artifacts
+          if-no-files-found: ignore
+          retention-days: 30

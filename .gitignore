@@ -24,3 +24,6 @@ Config/Info.plist
 
 # Logs
 *.log
+
+# Fuzz findings (crashing inputs are uploaded as CI artifacts instead)
+Fuzzing/artifacts/

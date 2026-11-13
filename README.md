@@ -60,6 +60,7 @@ App/                    SwiftUI app target (iOS 17+)
   Features/Diagnostics/ the device-feedback harness
   Support/              getifaddrs, sysctl, NWConnection probing
 Tests/ScopeScanAppTests/
+Fuzzing/                libFuzzer harnesses for the untrusted-input parsers
 project.yml             XcodeGen input; the .xcodeproj is generated, never committed
 scripts/
   ci-destination.sh     picks a simulator for CI
@@ -125,6 +126,20 @@ brew install xcodegen
 xcodegen generate
 xcodebuild -project ScopeScan.xcodeproj -scheme ScopeScan \
   -destination 'platform=iOS Simulator,name=iPhone 16' test
+```
+
+## Fuzzing
+
+The parsers that consume bytes from LAN devices are fuzzed with libFuzzer in the
+`fuzz` workflow: 60 seconds per target on pull requests, 10 minutes nightly,
+with the corpus cached between runs and crashing inputs uploaded as artifacts.
+
+Harnesses live in `Fuzzing/` and are compiled with `swiftc` rather than SwiftPM,
+because libFuzzer supplies the executable's `main`. Linux is the supported host —
+it is the only toolchain that ships the fuzzer runtime.
+
+```bash
+FUZZ_SECONDS=60 bash Fuzzing/run-fuzzing.sh
 ```
 
 ## Legal
