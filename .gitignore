@@ -1,3 +1,6 @@
+# CI artifacts pulled locally
+.artifacts/
+
 # Xcode
 *.xcodeproj/
 *.xcworkspace/
