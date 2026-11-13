@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import ScopeScanCore
 
 /// A single TCP connect attempt.
 ///
