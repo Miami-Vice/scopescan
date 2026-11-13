@@ -94,6 +94,21 @@ enum NetworkInterfaces {
         return false
     }
 
+    /// The /24 around the Wi-Fi address, offered as the default scope.
+    ///
+    /// Only `en0` with a private RFC 1918 address qualifies. Cellular (`pdp_ip*`),
+    /// tunnel and CGNAT addresses never become a suggestion, so a scan cannot be
+    /// aimed at a carrier or VPN network by accident.
+    static func suggestedScope() -> ScanScope? {
+        guard let wifi = allIPv4().first(where: { $0.name == "en0" && $0.isUp }),
+              let address = IPv4Address(wifi.address),
+              address.isPrivate
+        else {
+            return nil
+        }
+        return try? ScanScope(hostAddress: address, prefixLength: 24)
+    }
+
     /// Best-effort gateway guess: most consumer routers sit at the first host
     /// address of the /24 they hand out.
     static func gatewayGuess(for address: String) -> String? {

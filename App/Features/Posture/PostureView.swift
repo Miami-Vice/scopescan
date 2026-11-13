@@ -290,7 +290,7 @@ private struct CheckRow: View {
     }
 }
 
-private struct FindingRow: View {
+struct FindingRow: View {
     let finding: Finding
 
     var body: some View {
@@ -332,7 +332,7 @@ struct SeverityBadge: View {
 
 // MARK: - Detail
 
-private struct FindingDetailView: View {
+struct FindingDetailView: View {
     let finding: Finding
 
     var body: some View {
