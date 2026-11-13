@@ -1,0 +1,13 @@
+* text=auto
+
+# Shell scripts must keep LF or bash on macOS runners fails with "\r: command not found"
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+*.swift text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+
+*.png binary
+*.ipa binary

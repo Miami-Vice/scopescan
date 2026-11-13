@@ -1,0 +1,57 @@
+name: unsigned ipa
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: ipa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ipa:
+    name: build unsigned ipa
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate project
+        run: xcodegen generate
+
+      # Deliberately unsigned: AltStore/SideStore re-signs this artifact on
+      # device with a free Apple ID, which cannot use a CI signing identity.
+      - name: Archive
+        run: |
+          set -o pipefail
+          xcodebuild archive \
+            -project ScopeScan.xcodeproj \
+            -scheme ScopeScan \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/ScopeScan.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM=""
+
+      - name: Package IPA
+        run: |
+          set -euo pipefail
+          app="build/ScopeScan.xcarchive/Products/Applications/ScopeScan.app"
+          test -d "$app"
+          rm -rf build/Payload build/ScopeScan-unsigned.ipa
+          mkdir -p build/Payload
+          cp -R "$app" build/Payload/
+          (cd build && zip -qry ScopeScan-unsigned.ipa Payload)
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ScopeScan-unsigned-ipa
+          path: build/ScopeScan-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 30

@@ -1,0 +1,23 @@
+# Xcode
+*.xcodeproj/
+*.xcworkspace/
+DerivedData/
+build/
+*.xcarchive
+*.ipa
+xcuserdata/
+*.xcuserstate
+
+# SwiftPM
+.build/
+.swiftpm/
+Package.resolved
+
+# XcodeGen output
+Config/Info.plist
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
