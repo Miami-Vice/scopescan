@@ -35,7 +35,11 @@ public struct OSVersion: Hashable, Comparable, Codable, Sendable, CustomStringCo
         )
     }
 
-    public var description: String { "\(major).\(minor).\(patch)" }
+    public var description: String {
+        // Apple writes "27.0", never "27.0.0" — only include the patch when it
+        // is non-zero, so this renders the way a user reads it.
+        patch == 0 ? "\(major).\(minor)" : "\(major).\(minor).\(patch)"
+    }
 
     public static func < (lhs: OSVersion, rhs: OSVersion) -> Bool {
         if lhs.major != rhs.major { return lhs.major < rhs.major }

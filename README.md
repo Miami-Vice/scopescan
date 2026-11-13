@@ -9,14 +9,14 @@ It is *not* an exploit finder. Nothing running in an iOS sandbox can be — see
 
 ## Status
 
-M0 is complete and the app runs on hardware. M1's core rules are complete and
-unit-tested; the app-side collection and UI are built and awaiting on-device
-verification.
+M0 is complete and M1 is complete and verified on hardware: the app reports
+one informational finding (active VPN) on a healthy device, with every check's
+collected value matching the raw diagnostics baseline.
 
 | Milestone | Scope | State |
 |---|---|---|
 | M0 | Scaffold, `ScopeScanCore`, XcodeGen, CI, unsigned IPA, on-device install | complete |
-| M1 | Posture checks + findings model | core complete, app layer in verification |
+| M1 | Posture checks + findings model | complete, device-verified |
 | M2 | Scope validation, discovery, Bonjour enumeration | planned |
 | M3 | TLS grading, banner fingerprinting, remediation | planned |
 | M4 | Encrypted storage, redacted export, hardening | planned |
@@ -66,6 +66,7 @@ scripts/
   build-ipa.sh          local unsigned-IPA build (needs a Mac)
   test-core.ps1         local core tests on Windows
   usbmux-diag.py        proves the USB device stack works before sideloading
+  ocr-image.ps1         Windows OCR for phone screenshots (device feedback loop)
   generate-icon.ps1     regenerates the app icon
 ```
 

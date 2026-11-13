@@ -32,4 +32,11 @@ final class OSVersionTests: XCTestCase {
         XCTAssertEqual(OSVersion(27, 0).majorReleasesBehind(OSVersion(27, 1)), 0)
         XCTAssertEqual(OSVersion(28, 0).majorReleasesBehind(OSVersion(27, 0)), 0)
     }
+
+    func testDescriptionMatchesAppleVersionStyle() {
+        XCTAssertEqual(OSVersion(27).description, "27.0")
+        XCTAssertEqual(OSVersion(18, 4).description, "18.4")
+        XCTAssertEqual(OSVersion(27, 0, 1).description, "27.0.1")
+        XCTAssertEqual(OSVersion(16, 7, 2).description, "16.7.2")
+    }
 }
