@@ -2,8 +2,8 @@ import SwiftUI
 
 @main
 struct ScopeScanApp: App {
-    @StateObject private var posture = PostureStore()
-    @StateObject private var lock = AppLock()
+    @State private var posture = PostureStore()
+    @State private var lock = AppLock()
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {

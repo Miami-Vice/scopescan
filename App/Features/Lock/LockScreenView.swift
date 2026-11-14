@@ -3,7 +3,7 @@ import SwiftUI
 /// Shown until the device owner authenticates. It is opaque, so saved scans are
 /// not visible behind it.
 struct LockScreenView: View {
-    @ObservedObject var lock: AppLock
+    let lock: AppLock
 
     var body: some View {
         ZStack {

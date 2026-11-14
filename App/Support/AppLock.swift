@@ -1,16 +1,20 @@
-import Combine
 import LocalAuthentication
+import Observation
 
 /// App-level lock backed by the system's own authentication. The device passcode
 /// is the fallback, so the app never stores or checks a secret of its own.
-@MainActor
-final class AppLock: ObservableObject {
-    @Published private(set) var isLocked = true
-    @Published private(set) var isAuthenticating = false
-    @Published private(set) var message: String?
+///
+/// Mutated only from SwiftUI, which calls it on the main thread. It is not marked
+/// `@MainActor` because the app creates it in a `@State` initializer, which is
+/// not main-actor isolated.
+@Observable
+final class AppLock {
+    private(set) var isLocked = true
+    private(set) var isAuthenticating = false
+    private(set) var message: String?
     /// Set when the device has no passcode, which leaves nothing to
     /// authenticate against. The lock screen offers an explicit way past it.
-    @Published private(set) var hasNoPasscode = false
+    private(set) var hasNoPasscode = false
 
     private let reason = "Unlock ScopeScan to view saved scans."
 
