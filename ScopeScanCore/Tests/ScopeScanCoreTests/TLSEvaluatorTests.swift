@@ -88,6 +88,28 @@ final class TLSEvaluatorTests: XCTestCase {
         XCTAssertTrue(findings.first?.evidence.contains("router.local") == true)
     }
 
+    func testNumericSubjectReadsAsUnnamed() {
+        let findings = TLSEvaluator(now: now).evaluate(
+            TLSObservation(
+                host: "192.168.12.157",
+                port: 8443,
+                version: .tls12,
+                leafNotAfter: nil,
+                leafKeyBits: nil,
+                leafSubject: "9135534784654715206",
+                chainTrusted: false
+            )
+        )
+        XCTAssertEqual(findings.first?.evidence.contains("an unnamed certificate"), true)
+        XCTAssertEqual(findings.first?.evidence.contains("9135534784654715206"), false)
+    }
+
+    func testMissingSubjectReadsAsUnnamed() {
+        XCTAssertEqual(observation(trusted: false).subjectDescription, "a certificate for \"router.local\"")
+        let blank = TLSObservation(host: "h", port: 443, version: .tls13, leafNotAfter: nil, leafKeyBits: nil, leafSubject: nil, chainTrusted: true)
+        XCTAssertEqual(blank.subjectDescription, "an unnamed certificate")
+    }
+
     func testFindingsCarryHostAndPort() {
         for finding in evaluate(observation(version: .tls10, trusted: false)) {
             XCTAssertEqual(finding.host, "192.168.12.1")

@@ -64,6 +64,19 @@ public struct TLSObservation: Sendable, Hashable {
         self.chainTrusted = chainTrusted
     }
 
+    /// How the certificate is named in a finding. iOS reports a certificate
+    /// with no common name as its serial number, which is not a name a person
+    /// can recognise, so an all-digit subject reads as unnamed.
+    public var subjectDescription: String {
+        guard let subject = leafSubject?.trimmingCharacters(in: .whitespaces),
+              !subject.isEmpty,
+              !subject.allSatisfy(\.isNumber)
+        else {
+            return "an unnamed certificate"
+        }
+        return "a certificate for \"\(subject)\""
+    }
+
     /// The smallest key this device should accept without a finding, or nil
     /// when the family is unknown and no judgement can be made.
     public var minimumAcceptableKeyBits: Int? {
@@ -146,7 +159,7 @@ public struct TLSEvaluator: Sendable {
                 finding(
                     title: "Certificate is not trusted by this device",
                     severity: .low,
-                    evidence: "\(location) presented a certificate this device does not trust\(observation.leafSubject.map { " (\($0))" } ?? "").",
+                    evidence: "\(location) presented \(observation.subjectDescription) that this device does not trust.",
                     remediation: "Expected for self-signed or private-CA devices on a home network. Confirm the certificate belongs to the device you intend, and avoid sending credentials over it if it does not.",
                     observation: observation
                 )
