@@ -4,7 +4,7 @@ import XCTest
 final class ReportExportTests: XCTestCase {
     private let started = Date(timeIntervalSince1970: 1_800_000_000)
 
-    private func sampleReport() -> ScanReport {
+    private func sampleReport(findings: [Finding]? = nil) -> ScanReport {
         let router = IPv4Address("192.168.12.1")!
         let pc = IPv4Address("192.168.12.157")!
         let openPorts = [
@@ -27,7 +27,7 @@ final class ReportExportTests: XCTestCase {
                 )
             ],
             openPorts: openPorts,
-            findings: findings,
+            findings: findings ?? ExposureEvaluator().evaluate(openPorts),
             bonjour: [BonjourService(name: "Living Room TV", type: "_airplay._tcp", domain: "local.")],
             refusedProbeCount: 0,
             firstRefusal: nil,
@@ -45,13 +45,13 @@ final class ReportExportTests: XCTestCase {
         XCTAssertTrue(export.findings.contains { $0.evidence.contains("192.168.12.157") })
     }
 
-    func testMaskLastOctetHidesHostPart() throws {
+    func testMaskLastOctetHidesHostPartButKeepsHostsDistinct() throws {
         let export = ReportExporter.export(sampleReport(), redaction: .maskLastOctet)
 
-        XCTAssertEqual(export.hosts.map(\.address), ["192.168.12.x", "192.168.12.x"])
+        XCTAssertEqual(export.hosts.map(\.address), ["192.168.12.x (host 1)", "192.168.12.x (host 2)"])
         let finding = try XCTUnwrap(export.findings.first { $0.host != nil })
-        XCTAssertEqual(finding.host, "192.168.12.x")
-        XCTAssertTrue(finding.evidence.contains("192.168.12.x"))
+        XCTAssertEqual(finding.host, "192.168.12.x (host 2)")
+        XCTAssertTrue(finding.evidence.contains("192.168.12.x (host 2)"))
         XCTAssertFalse(finding.evidence.contains("157"))
         XCTAssertEqual(export.network, "192.168.12.0/24")
     }
@@ -121,6 +121,28 @@ final class ReportExportTests: XCTestCase {
         let export = ReportExporter.export(sampleReport(), redaction: .pseudonyms)
         XCTAssertEqual(export.bonjourServices.map(\.type), ["airplay (TCP)"])
         XCTAssertEqual(export.bonjourServices.map(\.name), [nil])
+    }
+
+    func testPseudonymExportWithholdsTheSubnet() {
+        let export = ReportExporter.export(sampleReport(), redaction: .pseudonyms)
+        XCTAssertEqual(export.network, "redacted/24")
+    }
+
+    func testFindingForAddressWithoutAHostRowIsStillRedacted() {
+        let finding = Finding(
+            title: "Test finding",
+            severity: .low,
+            category: .networkExposure,
+            evidence: "192.168.12.200 answered on port 80",
+            remediation: "None",
+            host: "192.168.12.200"
+        )
+
+        for mode in [AddressRedaction.maskLastOctet, .pseudonyms] {
+            let export = ReportExporter.export(sampleReport(findings: [finding]), redaction: mode)
+            let text = String(decoding: (try? ReportExporter.json(export)) ?? Data(), as: UTF8.self)
+            XCTAssertFalse(text.contains("192.168.12.200"), "\(mode) leaked a finding-only address")
+        }
     }
 
     func testJSONRoundTripsAndIsVersioned() throws {

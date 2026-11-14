@@ -35,7 +35,7 @@ public struct ReportExport: Codable, Sendable, Equatable {
         public let detail: String?
     }
 
-    public struct BonjourEntry: Codable, Sendable, Equatable {
+    public struct BonjourEntry: Codable, Sendable, Hashable, Equatable {
         /// The name the device announced. Nil once the export is redacted.
         public let name: String?
         public let type: String
@@ -72,11 +72,20 @@ public struct ReportExport: Codable, Sendable, Equatable {
     public func redacted(_ mode: AddressRedaction) -> ReportExport {
         guard redaction == .none, mode != .none else { return self }
 
-        let mapping = AddressMapping(addresses: hosts.map(\.address), redaction: mode)
+        // Findings can name an address that has no host row (for example the
+        // gateway), and an address missing from the mapping would be left
+        // unmasked in evidence text. Map both sources.
+        let mapping = AddressMapping(
+            addresses: hosts.map(\.address) + findings.compactMap(\.host),
+            redaction: mode
+        )
 
         return ReportExport(
             formatVersion: formatVersion,
-            network: mapping.redact(network),
+            // Mask mode keeps the subnet on purpose: it hides which host is
+            // which, not which network was scanned. Pseudonyms promise no
+            // layout, so the network is withheld there.
+            network: mode == .pseudonyms ? "redacted/\(prefixLength(of: network))" : network,
             startedAt: startedAt,
             durationSeconds: durationSeconds,
             redaction: mode,
@@ -104,8 +113,16 @@ public struct ReportExport: Codable, Sendable, Equatable {
                     port: finding.port
                 )
             },
-            bonjourServices: bonjourServices.map { BonjourEntry(name: nil, type: $0.type) }
+            bonjourServices: Array(
+                Set(bonjourServices.map { BonjourEntry(name: nil, type: $0.type) })
+            ).sorted { $0.type < $1.type }
         )
+    }
+
+    /// The `/24` in `192.168.12.0/24`, kept when the subnet itself is withheld.
+    private func prefixLength(of cidr: String) -> String {
+        guard let slash = cidr.lastIndex(of: "/") else { return "?" }
+        return String(cidr[cidr.index(after: slash)...])
     }
 }
 
@@ -190,7 +207,10 @@ struct AddressMapping {
             case .none:
                 replacement = text
             case .maskLastOctet:
-                replacement = Self.masked(text)
+                // Every host in a /24 masks to the same text, which would make
+                // the rows and their findings indistinguishable. The index keeps
+                // them apart without revealing the host part.
+                replacement = "\(Self.masked(text)) (host \(index + 1))"
             case .pseudonyms:
                 replacement = "host-\(index + 1)"
             }
