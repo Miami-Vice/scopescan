@@ -10,7 +10,7 @@ import ScopeScanCore
 /// beyond a HEAD request, and every read stops at a size or time limit.
 enum ServiceProber {
     struct Outcome: Sendable {
-        let address: IPv4Address
+        let address: ScopeScanCore.IPv4Address
         let port: UInt16
         let detail: String?
         let tls: TLSObservation?
@@ -24,7 +24,7 @@ enum ServiceProber {
         sshPorts.contains(port) || httpPorts.contains(port) || tlsPorts.contains(port)
     }
 
-    static func probe(_ address: IPv4Address, port: UInt16, timeout: TimeInterval = 4) async -> Outcome {
+    static func probe(_ address: ScopeScanCore.IPv4Address, port: UInt16, timeout: TimeInterval = 4) async -> Outcome {
         let host = address.description
 
         if sshPorts.contains(port) {
