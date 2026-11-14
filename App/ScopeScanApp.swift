@@ -2,33 +2,38 @@ import SwiftUI
 
 @main
 struct ScopeScanApp: App {
-    @State private var posture = PostureStore()
+    @StateObject private var posture = PostureStore()
+    @StateObject private var lock = AppLock()
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
-            RootView()
-                .environment(posture)
-                .overlay {
-                    // The app switcher snapshots the screen as the app leaves the
-                    // foreground. Covering it keeps scan results out of that image.
-                    if scenePhase != .active {
-                        PrivacyCover()
-                    }
-                }
-        }
-    }
-}
+            ZStack {
+                RootView()
+                    .environment(posture)
 
-private struct PrivacyCover: View {
-    var body: some View {
-        ZStack {
-            Rectangle()
-                .fill(.background)
-                .ignoresSafeArea()
-            Label("ScopeScan", systemImage: "lock.shield")
-                .font(.headline)
-                .foregroundStyle(.secondary)
+                if lock.isLocked {
+                    LockScreenView(lock: lock)
+                        .transition(.opacity)
+                }
+            }
+            .animation(.easeInOut(duration: 0.15), value: lock.isLocked)
+            .task {
+                // The UIKit cover has to be installed before the first time the
+                // app is backgrounded, so it is set up with the root view.
+                PrivacyScreen.shared.start()
+                await lock.unlock()
+            }
+            .onChange(of: scenePhase) { _, phase in
+                switch phase {
+                case .active:
+                    Task { await lock.unlock() }
+                case .background:
+                    lock.lock()
+                default:
+                    break
+                }
+            }
         }
     }
 }
