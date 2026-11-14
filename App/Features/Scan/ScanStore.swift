@@ -76,14 +76,56 @@ final class ScanStore {
                 host.openPorts.map { OpenPort(host: host.address.description, port: $0) }
             }
 
+            let targets = sweep.hosts.flatMap { host in
+                host.openPorts.filter(ServiceProber.handles).map { (host.address, $0) }
+            }
+            let outcomes = await withTaskGroup(
+                of: ServiceProber.Outcome.self,
+                returning: [ServiceProber.Outcome].self
+            ) { group in
+                for (address, port) in targets {
+                    group.addTask { await ServiceProber.probe(address, port: port) }
+                }
+                var collected: [ServiceProber.Outcome] = []
+                for await outcome in group {
+                    collected.append(outcome)
+                }
+                return collected
+            }
+
+            let ownAddresses = Set(NetworkInterfaces.allIPv4().compactMap { IPv4Address($0.address) })
+            let gateway = NetworkInterfaces.primaryIPv4()
+                .flatMap { NetworkInterfaces.gatewayGuess(for: $0.address) }
+                .flatMap { IPv4Address($0) }
+            let outcomesByHost = Dictionary(grouping: outcomes, by: \.address)
+
+            let hosts = sweep.hosts.map { host -> HostReport in
+                var details: [UInt16: String] = [:]
+                for outcome in outcomesByHost[host.address] ?? [] {
+                    if let detail = outcome.detail { details[outcome.port] = detail }
+                }
+                return HostReport(
+                    address: host.address,
+                    openPorts: host.openPorts,
+                    details: details,
+                    label: HostLabel.describe(
+                        openPorts: host.openPorts,
+                        isGateway: host.address == gateway,
+                        isThisDevice: ownAddresses.contains(host.address)
+                    )
+                )
+            }
+
+            let tlsFindings = outcomes.compactMap(\.tls).flatMap { TLSEvaluator().evaluate($0) }
+
             report = ScanReport(
                 cidr: scope.cidr,
                 startedAt: startedAt,
                 duration: Date().timeIntervalSince(startedAt),
                 scannedHostCount: sweep.scannedHostCount,
-                hosts: sweep.hosts,
+                hosts: hosts,
                 openPorts: openPorts,
-                findings: evaluator.evaluate(openPorts),
+                findings: (evaluator.evaluate(openPorts) + tlsFindings).sortedBySeverity(),
                 bonjour: bonjour.services,
                 refusedProbeCount: sweep.refusedProbeCount,
                 firstRefusal: sweep.firstRefusal,

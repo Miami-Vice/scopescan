@@ -8,12 +8,23 @@ import Foundation
 public struct HostReport: Identifiable, Sendable, Hashable {
     public let address: IPv4Address
     public let openPorts: [UInt16]
+    /// What each open port said about itself, e.g. `SSH 2.0, OpenSSH_9.6`.
+    public let details: [UInt16: String]
+    /// A guess at what the host is, from `HostLabel`.
+    public let label: String?
 
     public var id: IPv4Address { address }
 
-    public init(address: IPv4Address, openPorts: [UInt16]) {
+    public init(
+        address: IPv4Address,
+        openPorts: [UInt16],
+        details: [UInt16: String] = [:],
+        label: String? = nil
+    ) {
         self.address = address
         self.openPorts = openPorts
+        self.details = details
+        self.label = label
     }
 }
 

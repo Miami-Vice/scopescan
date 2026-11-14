@@ -68,3 +68,37 @@ func fuzzOSVersion(_ bytes: UnsafeRawBufferPointer) {
     precondition(reparsed == version, "round trip changed \(version) into \(reparsed)")
     precondition(version.majorReleasesBehind(version) == 0, "version is behind itself")
 }
+
+func fuzzSSHBanner(_ bytes: UnsafeRawBufferPointer) {
+    let input = Array(bytes)
+    guard let banner = SSHBannerParser.parse(input) else { return }
+
+    precondition(!banner.protocolVersion.isEmpty, "accepted an empty protocol version")
+    precondition(!banner.software.isEmpty, "accepted an empty software version")
+    // A banner is one line: nothing a server sends may smuggle a line break into the summary.
+    precondition(!banner.summary.contains("\n") && !banner.summary.contains("\r"), "summary spans lines")
+    precondition(banner.software.utf8.count + banner.protocolVersion.utf8.count <= SSHBannerParser.maximumLength,
+                 "banner exceeds the RFC 4253 length limit")
+}
+
+func fuzzX509Validity(_ bytes: UnsafeRawBufferPointer) {
+    let input = Array(bytes)
+    let first = X509Validity.notAfter(certificateDER: input)
+    // The parser is pure: the same bytes must always yield the same date.
+    precondition(first == X509Validity.notAfter(certificateDER: input), "validity parse is not deterministic")
+    if let date = first {
+        precondition(date.timeIntervalSince1970.isFinite, "validity produced a non-finite date")
+    }
+}
+
+func fuzzHTTPResponseHead(_ bytes: UnsafeRawBufferPointer) {
+    let input = Array(bytes)
+    guard let head = HTTPResponseParser.parse(input) else { return }
+
+    precondition((100...599).contains(head.statusCode), "status \(head.statusCode) out of range")
+    precondition(!head.reason.contains("\n") && !head.reason.contains("\r"), "reason spans lines")
+    if let server = head.server {
+        precondition(server.count <= HTTPResponseParser.maximumValueLength, "server value not truncated")
+        precondition(server.allSatisfy(\.isASCII), "server value is not ASCII")
+    }
+}

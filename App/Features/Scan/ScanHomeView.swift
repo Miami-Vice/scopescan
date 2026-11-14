@@ -255,6 +255,10 @@ private struct HostRow: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(host.address.description)
                 .font(.callout.monospaced())
+            if let label = host.label {
+                Text(label)
+                    .font(.caption)
+            }
             Text(summary)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -275,16 +279,32 @@ private struct HostDetailView: View {
             Section("Address") {
                 Text(host.address.description)
                     .font(.callout.monospaced())
+                if let label = host.label {
+                    Text(label)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
             }
-            Section("Open ports") {
+            Section {
                 if host.openPorts.isEmpty {
                     Text("None of the catalogued ports accepted a connection.")
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(host.openPorts, id: \.self) { port in
-                        LabeledContent("\(port)", value: ServiceCatalog.name(for: port))
+                        VStack(alignment: .leading, spacing: 2) {
+                            LabeledContent("\(port)", value: ServiceCatalog.name(for: port))
+                            if let detail = host.details[port] {
+                                Text(detail)
+                                    .font(.caption.monospaced())
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                     }
                 }
+            } header: {
+                Text("Open ports")
+            } footer: {
+                Text("Banners and certificates are read once, with no login attempts. A device may report less than it actually runs.")
             }
         }
         .navigationTitle("Host")

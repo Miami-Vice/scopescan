@@ -25,6 +25,8 @@ targets=(
     "IPv4Network:ipv4-network"
     "ScanScope:scan-scope"
     "OSVersion:os-version"
+    "SSHBanner:ssh-banner"
+    "HTTPResponseHead:http-head"
 )
 
 core_sources=("$root"/ScopeScanCore/Sources/ScopeScanCore/*.swift)
