@@ -17,7 +17,7 @@ collected value matching the raw diagnostics baseline.
 |---|---|---|
 | M0 | Scaffold, `ScopeScanCore`, XcodeGen, CI, unsigned IPA, on-device install | complete |
 | M1 | Posture checks + findings model | complete, device-verified |
-| M2 | Scope validation, discovery, port inventory, Bonjour enumeration | core complete and unit-tested; app layer awaiting device verification |
+| M2 | Scope validation, discovery, port inventory, Bonjour enumeration | complete, device-verified: full /24 sweep, findings and Bonjour services on hardware |
 | M3 | TLS grading, banner fingerprinting, remediation | planned |
 | M4 | Encrypted storage, redacted export, hardening | planned |
 
