@@ -61,10 +61,17 @@ public struct BonjourService: Identifiable, Sendable, Hashable {
 public struct BonjourDiscovery: Sendable, Hashable {
     public let services: [BonjourService]
     public let denied: Bool
+    /// The name each announcing device gave itself, keyed by its address.
+    public let namesByAddress: [IPv4Address: String]
 
-    public init(services: [BonjourService] = [], denied: Bool = false) {
+    public init(
+        services: [BonjourService] = [],
+        denied: Bool = false,
+        namesByAddress: [IPv4Address: String] = [:]
+    ) {
         self.services = services
         self.denied = denied
+        self.namesByAddress = namesByAddress
     }
 
     public static let none = BonjourDiscovery()

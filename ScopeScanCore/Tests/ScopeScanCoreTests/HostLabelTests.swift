@@ -26,6 +26,27 @@ final class HostLabelTests: XCTestCase {
         XCTAssertEqual(HostLabel.describe(openPorts: [443], isGateway: false, isThisDevice: false), "Likely web device")
     }
 
+    func testAnnouncedNameBeatsPortGuess() {
+        XCTAssertEqual(
+            HostLabel.describe(openPorts: [80, 443], isGateway: false, isThisDevice: false, announcedName: "Living Room TV"),
+            "Named by Bonjour: Living Room TV"
+        )
+    }
+
+    func testRouterStaysRouterEvenIfItAnnouncesAName() {
+        XCTAssertEqual(
+            HostLabel.describe(openPorts: [80], isGateway: true, isThisDevice: false, announcedName: "Eero"),
+            "Likely router"
+        )
+    }
+
+    func testEmptyAnnouncedNameIsIgnored() {
+        XCTAssertEqual(
+            HostLabel.describe(openPorts: [443], isGateway: false, isThisDevice: false, announcedName: ""),
+            "Likely web device"
+        )
+    }
+
     func testNoOpenPortsGivesNoLabel() {
         XCTAssertNil(HostLabel.describe(openPorts: [], isGateway: false, isThisDevice: false))
     }

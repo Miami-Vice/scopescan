@@ -111,7 +111,8 @@ final class ScanStore {
                     label: HostLabel.describe(
                         openPorts: host.openPorts,
                         isGateway: host.address == gateway,
-                        isThisDevice: ownAddresses.contains(host.address)
+                        isThisDevice: ownAddresses.contains(host.address),
+                        announcedName: bonjour.namesByAddress[host.address]
                     )
                 )
             }

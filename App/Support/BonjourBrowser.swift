@@ -2,7 +2,8 @@ import Foundation
 import Network
 import ScopeScanCore
 
-/// Lists Bonjour services advertised on the local network.
+/// Lists Bonjour services advertised on the local network, and resolves each
+/// one to an IPv4 address so its announced name can label that host.
 ///
 /// Browsing needs no multicast entitlement, only the Local Network permission
 /// and the service types declared in `NSBonjourServices`. The browse is
@@ -44,13 +45,39 @@ enum BonjourBrowser {
         }
 
         browser.browseResultsChangedHandler = { results, _ in
-            collector.add(results.compactMap { result -> BonjourService? in
-                guard case let .service(name, type, domain, _) = result.endpoint else { return nil }
-                return BonjourService(name: name, type: type, domain: domain)
-            })
+            var found: [BonjourService] = []
+            for result in results {
+                guard case let .service(name, type, domain, _) = result.endpoint else { continue }
+                found.append(BonjourService(name: name, type: type, domain: domain))
+                collector.resolveIfNeeded(endpoint: result.endpoint, name: name)
+            }
+            collector.add(found)
         }
 
         return browser
+    }
+
+    /// Opens a connection to the service only to read which address it
+    /// resolved to. Nothing is sent, and the connection closes as soon as the
+    /// address is known or the deadline passes.
+    fileprivate static func resolve(endpoint: NWEndpoint, collector: BonjourCollector, name: String) {
+        let connection = NWConnection(to: endpoint, using: .tcp)
+        connection.stateUpdateHandler = { state in
+            switch state {
+            case .ready:
+                if case let .hostPort(host, _)? = connection.currentPath?.remoteEndpoint,
+                   case let .ipv4(address) = host {
+                    collector.addResolved(name: name, address: "\(address)")
+                }
+                connection.cancel()
+            case .failed, .cancelled:
+                connection.cancel()
+            default:
+                break
+            }
+        }
+        connection.start(queue: collector.queue)
+        collector.queue.asyncAfter(deadline: .now() + 3) { connection.cancel() }
     }
 }
 
@@ -60,6 +87,8 @@ private final class BonjourCollector: @unchecked Sendable {
     private let lock = NSLock()
     private var services = Set<BonjourService>()
     private var denied = false
+    private var names: [ScopeScanCore.IPv4Address: String] = [:]
+    private var attempted = Set<String>()
 
     func add(_ found: [BonjourService]) {
         lock.lock()
@@ -73,12 +102,35 @@ private final class BonjourCollector: @unchecked Sendable {
         denied = true
     }
 
+    /// Each instance is resolved at most once. Resolution runs on the browse
+    /// queue, so the connection callbacks and the browse callbacks never race.
+    func resolveIfNeeded(endpoint: NWEndpoint, name: String) {
+        lock.lock()
+        let isNew = attempted.insert(name).inserted
+        lock.unlock()
+        guard isNew else { return }
+        BonjourBrowser.resolve(endpoint: endpoint, collector: self, name: name)
+    }
+
+    func addResolved(name: String, address: String) {
+        guard let parsed = ScopeScanCore.IPv4Address(address) else { return }
+        lock.lock()
+        defer { lock.unlock() }
+        if names[parsed] == nil {
+            names[parsed] = name
+        }
+    }
+
     func snapshot() -> BonjourDiscovery {
         lock.lock()
         defer { lock.unlock() }
         let sorted = services.sorted {
             ($0.type, $0.name) < ($1.type, $1.name)
         }
-        return BonjourDiscovery(services: sorted, denied: denied && sorted.isEmpty)
+        return BonjourDiscovery(
+            services: sorted,
+            denied: denied && sorted.isEmpty,
+            namesByAddress: names
+        )
     }
 }

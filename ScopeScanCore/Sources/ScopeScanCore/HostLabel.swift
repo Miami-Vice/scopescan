@@ -5,9 +5,20 @@ import Foundation
 /// Labels are guesses from open ports and the network layout, never identities.
 /// They are shown as "Likely …" wherever a guess could be wrong.
 public enum HostLabel {
-    public static func describe(openPorts: [UInt16], isGateway: Bool, isThisDevice: Bool) -> String? {
+    /// `announcedName` is the name the device gave itself over Bonjour. It is
+    /// the strongest evidence available, so it is shown as given rather than
+    /// guessed from ports.
+    public static func describe(
+        openPorts: [UInt16],
+        isGateway: Bool,
+        isThisDevice: Bool,
+        announcedName: String? = nil
+    ) -> String? {
         if isThisDevice { return "This device" }
         if isGateway { return "Likely router" }
+        if let announcedName, !announcedName.isEmpty {
+            return "Named by Bonjour: \(announcedName)"
+        }
 
         let ports = Set(openPorts)
         if ports.contains(9100) || ports.contains(631) { return "Likely printer" }
