@@ -40,7 +40,8 @@ final class ReportExportTests: XCTestCase {
 
         XCTAssertEqual(export.hosts.map(\.address), ["192.168.12.1", "192.168.12.157"])
         XCTAssertEqual(export.network, "192.168.12.0/24")
-        XCTAssertEqual(export.bonjourServices, ["Living Room TV (airplay (TCP))"])
+        XCTAssertEqual(export.bonjourServices.map(\.name), ["Living Room TV"])
+        XCTAssertEqual(export.bonjourServices.map(\.type), ["airplay (TCP)"])
         XCTAssertTrue(export.findings.contains { $0.evidence.contains("192.168.12.157") })
     }
 
@@ -92,6 +93,34 @@ final class ReportExportTests: XCTestCase {
     func testFullExportKeepsBonjourNames() throws {
         let data = try ReportExporter.json(ReportExporter.export(sampleReport(), redaction: .none))
         XCTAssertTrue(String(decoding: data, as: UTF8.self).contains("Living Room TV"))
+    }
+
+    func testStoredFullExportRedactsLikeADirectExport() {
+        let full = ReportExporter.full(sampleReport())
+        for mode in AddressRedaction.allCases {
+            XCTAssertEqual(
+                full.redacted(mode),
+                ReportExporter.export(sampleReport(), redaction: mode),
+                "\(mode) differs between stored and direct export"
+            )
+        }
+    }
+
+    func testRedactedExportCannotBeRedactedAgain() {
+        let masked = ReportExporter.export(sampleReport(), redaction: .maskLastOctet)
+        XCTAssertEqual(masked.redacted(.pseudonyms), masked)
+        XCTAssertEqual(masked.redacted(.none), masked)
+    }
+
+    func testFullExportRedactedToFullIsUnchanged() {
+        let full = ReportExporter.full(sampleReport())
+        XCTAssertEqual(full.redacted(.none), full)
+    }
+
+    func testRedactedBonjourListKeepsOnlyServiceTypes() {
+        let export = ReportExporter.export(sampleReport(), redaction: .pseudonyms)
+        XCTAssertEqual(export.bonjourServices.map(\.type), ["airplay (TCP)"])
+        XCTAssertEqual(export.bonjourServices.map(\.name), [nil])
     }
 
     func testJSONRoundTripsAndIsVersioned() throws {

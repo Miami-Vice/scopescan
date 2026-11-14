@@ -19,7 +19,7 @@ collected value matching the raw diagnostics baseline.
 | M1 | Posture checks + findings model | complete, device-verified |
 | M2 | Scope validation, discovery, port inventory, Bonjour enumeration | complete, device-verified: full /24 sweep, findings and Bonjour services on hardware |
 | M3 | TLS certificate and version checks, SSH and HTTP banners, host labels | complete, device-verified for banners, TLS version and trust; expiry and key-size checks unit-tested only |
-| M4 | Encrypted storage, redacted export, hardening | in progress: redacted JSON export complete and unit-tested; encrypted storage and export screen pending |
+| M4 | Encrypted storage, redacted export, hardening | in progress: encrypted history with Keychain key, redacted JSON export, and an app-switcher privacy cover; device verification pending |
 
 ## What this cannot do
 

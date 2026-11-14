@@ -9,6 +9,9 @@ struct RootView: View {
             PostureView()
                 .tabItem { Label("Posture", systemImage: "checkmark.shield") }
 
+            HistoryView()
+                .tabItem { Label("History", systemImage: "clock.arrow.circlepath") }
+
             DiagnosticsView()
                 .tabItem { Label("Diagnostics", systemImage: "stethoscope") }
         }

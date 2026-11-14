@@ -35,6 +35,12 @@ public struct ReportExport: Codable, Sendable, Equatable {
         public let detail: String?
     }
 
+    public struct BonjourEntry: Codable, Sendable, Equatable {
+        /// The name the device announced. Nil once the export is redacted.
+        public let name: String?
+        public let type: String
+    }
+
     public struct Finding: Codable, Sendable, Equatable {
         public let title: String
         public let severity: Severity
@@ -58,68 +64,98 @@ public struct ReportExport: Codable, Sendable, Equatable {
     public let findings: [Finding]
     /// Bonjour instance names are device identifiers, so they are only kept
     /// when addresses are kept too. Service types are always included.
-    public let bonjourServices: [String]
-}
+    public let bonjourServices: [BonjourEntry]
 
-/// Builds a `ReportExport` from a scan, applying one redaction mode everywhere
-/// an address can appear: host lists, labels, finding evidence and remediation.
-public enum ReportExporter {
-    public static func export(_ report: ScanReport, redaction: AddressRedaction) -> ReportExport {
-        let mapping = AddressMapping(addresses: report.hosts.map(\.address), redaction: redaction)
+    /// A copy with `mode` applied. Only a full export can be redacted: once
+    /// addresses are masked they cannot be recovered, so a redacted export
+    /// returns itself unchanged.
+    public func redacted(_ mode: AddressRedaction) -> ReportExport {
+        guard redaction == .none, mode != .none else { return self }
 
-        let hosts = report.hosts.map { host in
-            ReportExport.Host(
-                address: mapping.replacement(for: host.address.description),
-                label: host.label.map { label in
-                    redaction == .none ? mapping.redact(label) : withoutAnnouncedName(label)
-                },
-                ports: host.openPorts.map { port in
-                    ReportExport.Port(
-                        port: port,
-                        name: ServiceCatalog.name(for: port),
-                        detail: host.details[port].map(mapping.redact)
-                    )
-                }
-            )
-        }
-
-        let findings = report.findings.map { finding in
-            ReportExport.Finding(
-                title: finding.title,
-                severity: finding.severity,
-                category: finding.category.displayName,
-                evidence: mapping.redact(finding.evidence),
-                remediation: finding.remediation,
-                host: finding.host.map(mapping.replacement(for:)),
-                port: finding.port
-            )
-        }
-
-        let bonjour: [String] = report.bonjour.map { service in
-            redaction == .none ? "\(service.name) (\(service.displayType))" : service.displayType
-        }
+        let mapping = AddressMapping(addresses: hosts.map(\.address), redaction: mode)
 
         return ReportExport(
+            formatVersion: formatVersion,
+            network: mapping.redact(network),
+            startedAt: startedAt,
+            durationSeconds: durationSeconds,
+            redaction: mode,
+            scannedHostCount: scannedHostCount,
+            hostsUp: hostsUp,
+            refusedProbeCount: refusedProbeCount,
+            wasCancelled: wasCancelled,
+            hosts: hosts.map { host in
+                Host(
+                    address: mapping.replacement(for: host.address),
+                    label: host.label.map(ReportExporter.redactLabel(_:)),
+                    ports: host.ports.map { port in
+                        Port(port: port.port, name: port.name, detail: port.detail.map(mapping.redact))
+                    }
+                )
+            },
+            findings: findings.map { finding in
+                Finding(
+                    title: finding.title,
+                    severity: finding.severity,
+                    category: finding.category,
+                    evidence: mapping.redact(finding.evidence),
+                    remediation: finding.remediation,
+                    host: finding.host.map(mapping.replacement(for:)),
+                    port: finding.port
+                )
+            },
+            bonjourServices: bonjourServices.map { BonjourEntry(name: nil, type: $0.type) }
+        )
+    }
+}
+
+/// Builds a `ReportExport` from a scan. A scan is always exported in full first
+/// and then redacted, so every mode goes through one code path.
+public enum ReportExporter {
+    public static func export(_ report: ScanReport, redaction: AddressRedaction) -> ReportExport {
+        full(report).redacted(redaction)
+    }
+
+    /// The unredacted form. This is what the app stores on the device.
+    public static func full(_ report: ScanReport) -> ReportExport {
+        ReportExport(
             formatVersion: ReportExport.formatVersion,
-            network: mapping.redact(report.cidr),
+            network: report.cidr,
             startedAt: report.startedAt,
             durationSeconds: report.duration,
-            redaction: redaction,
+            redaction: .none,
             scannedHostCount: report.scannedHostCount,
             hostsUp: report.hostsUp,
             refusedProbeCount: report.refusedProbeCount,
             wasCancelled: report.wasCancelled,
-            hosts: hosts,
-            findings: findings,
-            bonjourServices: bonjour
+            hosts: report.hosts.map { host in
+                ReportExport.Host(
+                    address: host.address.description,
+                    label: host.label,
+                    ports: host.openPorts.map { port in
+                        ReportExport.Port(
+                            port: port,
+                            name: ServiceCatalog.name(for: port),
+                            detail: host.details[port]
+                        )
+                    }
+                )
+            },
+            findings: report.findings.map { finding in
+                ReportExport.Finding(
+                    title: finding.title,
+                    severity: finding.severity,
+                    category: finding.category.displayName,
+                    evidence: finding.evidence,
+                    remediation: finding.remediation,
+                    host: finding.host,
+                    port: finding.port
+                )
+            },
+            bonjourServices: report.bonjour.map {
+                ReportExport.BonjourEntry(name: $0.name, type: $0.displayType)
+            }
         )
-    }
-
-    /// `Named by Bonjour: Living Room TV` keeps only the fact that a name was
-    /// announced. The name itself identifies a person's device.
-    static func withoutAnnouncedName(_ label: String) -> String {
-        let prefix = "Named by Bonjour"
-        return label.hasPrefix(prefix) ? prefix : label
     }
 
     public static func json(_ export: ReportExport) throws -> Data {
@@ -128,6 +164,14 @@ public enum ReportExporter {
         encoder.dateEncodingStrategy = .iso8601
         return try encoder.encode(export)
     }
+
+    /// `Named by Bonjour: Living Room TV` keeps only the fact that a name was
+    /// announced. The name itself identifies a person's device.
+    static func redactLabel(_ label: String) -> String {
+        let prefix = "Named by Bonjour"
+        return label.hasPrefix(prefix) ? prefix : label
+    }
+
 }
 
 /// One mapping from address text to its replacement, applied to every string.
@@ -135,11 +179,12 @@ struct AddressMapping {
     private let replacements: [(address: String, replacement: String)]
     private let byAddress: [String: String]
 
-    init(addresses: [IPv4Address], redaction: AddressRedaction) {
-        let unique = Array(Set(addresses)).sorted()
+    init(addresses: [String], redaction: AddressRedaction) {
+        let unique = Array(Set(addresses)).sorted { lhs, rhs in
+            (IPv4Address(lhs)?.rawValue ?? 0) < (IPv4Address(rhs)?.rawValue ?? 0)
+        }
         var pairs: [(String, String)] = []
-        for (index, address) in unique.enumerated() {
-            let text = address.description
+        for (index, text) in unique.enumerated() {
             let replacement: String
             switch redaction {
             case .none:

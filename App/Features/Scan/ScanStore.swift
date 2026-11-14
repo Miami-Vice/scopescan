@@ -132,6 +132,9 @@ final class ScanStore {
                 firstRefusal: sweep.firstRefusal,
                 wasCancelled: sweep.wasCancelled
             )
+            if let report, let vault = try? ReportVault() {
+                try? vault.save(ReportExporter.full(report))
+            }
             phase = .finished
             task = nil
         }
