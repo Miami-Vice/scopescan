@@ -19,7 +19,7 @@ collected value matching the raw diagnostics baseline.
 | M1 | Posture checks + findings model | complete, device-verified |
 | M2 | Scope validation, discovery, port inventory, Bonjour enumeration | complete, device-verified: full /24 sweep, findings and Bonjour services on hardware |
 | M3 | TLS certificate and version checks, SSH and HTTP banners, host labels | complete, device-verified for banners, TLS version and trust; expiry and key-size checks unit-tested only |
-| M4 | Encrypted storage, redacted export, hardening | in progress: encrypted history, redacted export, Face ID/passcode lock, and a UIKit privacy cover for the app switcher; device verification pending |
+| M4 | Encrypted storage, redacted export, hardening | done: encrypted history (AES-GCM, Keychain key), redacted export in three address modes, Face ID/passcode lock, UIKit app-switcher cover; verified on device |
 
 ## What this cannot do
 

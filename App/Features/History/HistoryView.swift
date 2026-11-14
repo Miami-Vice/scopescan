@@ -163,7 +163,7 @@ private struct ReportDetailView: View {
                         Text(option.displayName).tag(option)
                     }
                 }
-                .onChange(of: mode) { exportURL = nil }
+                .onChange(of: mode) { discardExport() }
 
                 Button("Prepare export") {
                     prepareExport()
@@ -194,12 +194,14 @@ private struct ReportDetailView: View {
         }
         .navigationTitle("Scan")
         .navigationBarTitleDisplayMode(.inline)
+        .onDisappear(perform: discardExport)
         .confirmationDialog("Delete this scan?", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Delete", role: .destructive) { onDelete() }
         }
     }
 
     private func prepareExport() {
+        discardExport()
         do {
             let data = try ReportExporter.json(export.redacted(mode))
             let name = "scopescan-\(export.startedAt.formatted(.iso8601.year().month().day().dateSeparator(.dash)))-\(mode.rawValue).json"
@@ -211,5 +213,14 @@ private struct ReportDetailView: View {
             exportURL = nil
             exportError = "Could not prepare the export: \(error.localizedDescription)"
         }
+    }
+
+    /// A redacted export is still a scan, so it is not left behind in the
+    /// temporary directory once the screen is gone or the mode changes.
+    private func discardExport() {
+        if let exportURL {
+            try? FileManager.default.removeItem(at: exportURL)
+        }
+        exportURL = nil
     }
 }
