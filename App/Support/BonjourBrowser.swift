@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 import Network
 import ScopeScanCore
 
@@ -15,7 +16,7 @@ enum BonjourBrowser {
         (Bundle.main.object(forInfoDictionaryKey: "NSBonjourServices") as? [String]) ?? []
     }
 
-    static func discover(duration: TimeInterval = 4) async -> BonjourDiscovery {
+    static func discover(duration: TimeInterval = 6) async -> BonjourDiscovery {
         let collector = BonjourCollector()
         let browsers = declaredTypes
             .filter { $0 != "_services._dns-sd._udp" }
@@ -49,35 +50,65 @@ enum BonjourBrowser {
             for result in results {
                 guard case let .service(name, type, domain, _) = result.endpoint else { continue }
                 found.append(BonjourService(name: name, type: type, domain: domain))
-                collector.resolveIfNeeded(endpoint: result.endpoint, name: name)
+                collector.resolveIfNeeded(name: name, type: type, domain: domain)
             }
             collector.add(found)
         }
 
         return browser
     }
+}
 
-    /// Opens a connection to the service only to read which address it
-    /// resolved to. Nothing is sent, and the connection closes as soon as the
-    /// address is known or the deadline passes.
-    fileprivate static func resolve(endpoint: NWEndpoint, collector: BonjourCollector, name: String) {
-        let connection = NWConnection(to: endpoint, using: .tcp)
-        connection.stateUpdateHandler = { state in
-            switch state {
-            case .ready:
-                if case let .hostPort(host, _)? = connection.currentPath?.remoteEndpoint,
-                   case let .ipv4(address) = host {
-                    collector.addResolved(name: name, address: "\(address)")
-                }
-                connection.cancel()
-            case .failed, .cancelled:
-                connection.cancel()
-            default:
-                break
+/// Resolves one Bonjour instance to its IPv4 address with `NetService`, which
+/// reports the address directly. A connection's remote endpoint does not reliably
+/// give one for a Bonjour service, which is why labels were not appearing.
+private final class ServiceResolver: NSObject, NetServiceDelegate {
+    private let service: NetService
+    private let completion: (String?) -> Void
+    private var finished = false
+
+    init(name: String, type: String, domain: String, completion: @escaping (String?) -> Void) {
+        let dottedType = type.hasSuffix(".") ? type : type + "."
+        self.service = NetService(domain: domain, type: dottedType, name: name)
+        self.completion = completion
+        super.init()
+    }
+
+    /// Must run on the main run loop, where NetService delivers its callbacks.
+    func start() {
+        service.delegate = self
+        service.resolve(withTimeout: 3)
+    }
+
+    func netServiceDidResolveAddress(_ sender: NetService) {
+        finish(Self.ipv4Address(from: sender.addresses ?? []))
+    }
+
+    func netService(_ sender: NetService, didNotResolve errorDict: [String: NSNumber]) {
+        finish(nil)
+    }
+
+    private func finish(_ address: String?) {
+        guard !finished else { return }
+        finished = true
+        service.stop()
+        completion(address)
+    }
+
+    private static func ipv4Address(from addresses: [Data]) -> String? {
+        for data in addresses {
+            let text: String? = data.withUnsafeBytes { raw -> String? in
+                guard let base = raw.baseAddress else { return nil }
+                let generic = base.assumingMemoryBound(to: sockaddr.self)
+                guard generic.pointee.sa_family == sa_family_t(AF_INET) else { return nil }
+                var address = base.assumingMemoryBound(to: sockaddr_in.self).pointee.sin_addr
+                var buffer = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
+                guard inet_ntop(AF_INET, &address, &buffer, socklen_t(buffer.count)) != nil else { return nil }
+                return String(cString: buffer)
             }
+            if let text { return text }
         }
-        connection.start(queue: collector.queue)
-        collector.queue.asyncAfter(deadline: .now() + 3) { connection.cancel() }
+        return nil
     }
 }
 
@@ -89,6 +120,7 @@ private final class BonjourCollector: @unchecked Sendable {
     private var denied = false
     private var names: [ScopeScanCore.IPv4Address: String] = [:]
     private var attempted = Set<String>()
+    private var resolvers: [ServiceResolver] = []
 
     func add(_ found: [BonjourService]) {
         lock.lock()
@@ -102,14 +134,23 @@ private final class BonjourCollector: @unchecked Sendable {
         denied = true
     }
 
-    /// Each instance is resolved at most once. Resolution runs on the browse
-    /// queue, so the connection callbacks and the browse callbacks never race.
-    func resolveIfNeeded(endpoint: NWEndpoint, name: String) {
+    /// Each instance is resolved at most once.
+    func resolveIfNeeded(name: String, type: String, domain: String) {
         lock.lock()
-        let isNew = attempted.insert(name).inserted
+        let isNew = attempted.insert("\(name)|\(type)|\(domain)").inserted
         lock.unlock()
         guard isNew else { return }
-        BonjourBrowser.resolve(endpoint: endpoint, collector: self, name: name)
+
+        DispatchQueue.main.async { [self] in
+            let resolver = ServiceResolver(name: name, type: type, domain: domain) { [weak self] address in
+                guard let address else { return }
+                self?.addResolved(name: name, address: address)
+            }
+            lock.lock()
+            resolvers.append(resolver)
+            lock.unlock()
+            resolver.start()
+        }
     }
 
     func addResolved(name: String, address: String) {
