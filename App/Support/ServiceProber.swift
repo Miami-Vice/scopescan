@@ -147,7 +147,7 @@ enum ServiceProber {
         sec_protocol_options_set_verify_block(
             security,
             { _, trust, complete in
-                let secTrust = sec_trust_copy_ref(trust)
+                let secTrust = sec_trust_copy_ref(trust).takeRetainedValue()
                 let trusted = SecTrustEvaluateWithError(secTrust, nil)
                 capture.record(secTrust, trusted: trusted)
                 complete(true)
@@ -216,13 +216,13 @@ enum ServiceProber {
         if let leaf, let key = SecCertificateCopyKey(leaf),
            let attributes = SecKeyCopyAttributes(key) as? [String: Any] {
             keyBits = attributes[kSecAttrKeySizeInBits as String] as? Int
-            switch attributes[kSecAttrKeyType as String] as? String {
-            case kSecAttrKeyTypeRSA as String:
+            let keyType = attributes[kSecAttrKeyType as String] as? String
+            let rsaType: String = kSecAttrKeyTypeRSA as String
+            let ellipticType: String = kSecAttrKeyTypeECSECPrimeRandom as String
+            if keyType == rsaType {
                 algorithm = .rsa
-            case kSecAttrKeyTypeECSECPrimeRandom as String:
+            } else if keyType == ellipticType {
                 algorithm = .ellipticCurve
-            default:
-                break
             }
         }
 
