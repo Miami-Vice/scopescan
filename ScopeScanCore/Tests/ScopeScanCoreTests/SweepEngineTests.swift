@@ -91,6 +91,24 @@ final class SweepEngineTests: XCTestCase {
         XCTAssertNotNil(result.firstRefusal)
     }
 
+    func testExcludedAddressesAreNeverProbed() async throws {
+        let scope = try ScanScope(cidr: "192.168.1.0/24")
+        let own = address("192.168.1.160")
+        let counter = ProbeCounter()
+        let result = await SweepEngine().sweep(
+            scope: scope,
+            excluding: [own],
+            probe: { host, _ in
+                await counter.record(host)
+                return .timedOut
+            }
+        )
+
+        XCTAssertEqual(result.scannedHostCount, scope.hostCount - 1)
+        let perHost = await counter.counts
+        XCTAssertNil(perHost[own])
+    }
+
     func testPermissionErrorsAreNotReportedAsUserCancellation() async throws {
         let scope = try ScanScope(cidr: "192.168.1.0/24")
         let result = await SweepEngine(concurrency: 4).sweep(

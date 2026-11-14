@@ -62,6 +62,7 @@ final class ScanStore {
             async let bonjourFound = BonjourBrowser.discover()
             let sweep = await engine.sweep(
                 scope: scope,
+                excluding: Set(NetworkInterfaces.allIPv4().compactMap { IPv4Address($0.address) }),
                 probe: { host, port in
                     await TCPProbe.outcome(host: host.description, port: port)
                 },

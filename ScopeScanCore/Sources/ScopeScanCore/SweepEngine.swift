@@ -58,13 +58,18 @@ public struct SweepEngine: Sendable {
         self.inventoryPorts = inventoryPorts
     }
 
+    /// `excluding` lists addresses that are never probed, typically this
+    /// device's own interfaces. iOS refuses connections to a device's own
+    /// address, which would otherwise look like a permission failure.
     public func sweep(
         scope: ScanScope,
+        excluding: Set<IPv4Address> = [],
         probe: @escaping Probe,
         progress: @escaping @Sendable (ScanProgress) -> Void = { _ in }
     ) async -> SweepResult {
-        let total = scope.hostCount
-        var iterator = scope.hosts.makeIterator()
+        let targets = scope.hosts.filter { !excluding.contains($0) }
+        let total = targets.count
+        var iterator = targets.makeIterator()
         var reports: [HostReport] = []
         var scanned = 0
         var openCount = 0
