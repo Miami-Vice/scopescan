@@ -84,7 +84,8 @@ final class ScanStore {
                 openPorts: openPorts,
                 findings: evaluator.evaluate(openPorts),
                 bonjour: bonjour.services,
-                localNetworkDenied: sweep.localNetworkDenied || bonjour.denied,
+                refusedProbeCount: sweep.refusedProbeCount,
+                firstRefusal: sweep.firstRefusal,
                 wasCancelled: sweep.wasCancelled
             )
             phase = .finished

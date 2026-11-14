@@ -92,9 +92,14 @@ public struct ScanReport: Sendable {
     public let openPorts: [OpenPort]
     public let findings: [Finding]
     public let bonjour: [BonjourService]
-    /// True when the Local Network permission blocked this scan.
-    public let localNetworkDenied: Bool
+    /// Probes the system refused with a permission error. Non-zero means the
+    /// results are incomplete, not that the network is quiet.
+    public let refusedProbeCount: Int
+    /// The first refused probe, for the report: host, port and error code.
+    public let firstRefusal: String?
     public let wasCancelled: Bool
+
+    public var localNetworkDenied: Bool { refusedProbeCount > 0 }
 
     public init(
         cidr: String,
@@ -105,7 +110,8 @@ public struct ScanReport: Sendable {
         openPorts: [OpenPort],
         findings: [Finding],
         bonjour: [BonjourService] = [],
-        localNetworkDenied: Bool = false,
+        refusedProbeCount: Int = 0,
+        firstRefusal: String? = nil,
         wasCancelled: Bool = false
     ) {
         self.cidr = cidr
@@ -116,7 +122,8 @@ public struct ScanReport: Sendable {
         self.openPorts = openPorts
         self.findings = findings
         self.bonjour = bonjour
-        self.localNetworkDenied = localNetworkDenied
+        self.refusedProbeCount = refusedProbeCount
+        self.firstRefusal = firstRefusal
         self.wasCancelled = wasCancelled
     }
 

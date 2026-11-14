@@ -11,8 +11,9 @@ public enum PortOutcome: Sendable, Hashable {
     case open
     /// The host answered with a reset. It is up; nothing is listening here.
     case closed
-    /// The Local Network permission was refused, so the probe never left the app.
-    case denied
+    /// The system refused the connection with a permission error, usually the
+    /// Local Network permission. The detail records the exact error code.
+    case denied(String)
     /// The address or network could not be reached.
     case unreachable
     /// No answer before the deadline.
@@ -33,14 +34,15 @@ public enum PortOutcome: Sendable, Hashable {
     /// Whether the probe was blocked by the Local Network permission rather
     /// than by the network.
     public var isPermissionDenied: Bool {
-        self == .denied
+        if case .denied = self { return true }
+        return false
     }
 
     public var description: String {
         switch self {
         case .open: return "connected"
         case .closed: return "refused (host is up)"
-        case .denied: return "denied: Local Network access is required"
+        case .denied(let detail): return "permission error (\(detail))"
         case .unreachable: return "unreachable"
         case .timedOut: return "timed out"
         case .cancelled: return "cancelled"

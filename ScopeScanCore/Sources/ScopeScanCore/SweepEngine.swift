@@ -6,13 +6,26 @@ public struct SweepResult: Sendable, Hashable {
     public let scannedHostCount: Int
     /// Hosts that answered, sorted by address.
     public let hosts: [HostReport]
-    public let localNetworkDenied: Bool
+    /// Probes the system refused with a permission error. They are not counted
+    /// as silence, so a non-zero value means the results are incomplete.
+    public let refusedProbeCount: Int
+    /// The first permission error seen, for the report.
+    public let firstRefusal: String?
     public let wasCancelled: Bool
 
-    public init(scannedHostCount: Int, hosts: [HostReport], localNetworkDenied: Bool, wasCancelled: Bool) {
+    public var localNetworkDenied: Bool { refusedProbeCount > 0 }
+
+    public init(
+        scannedHostCount: Int,
+        hosts: [HostReport],
+        refusedProbeCount: Int,
+        firstRefusal: String?,
+        wasCancelled: Bool
+    ) {
         self.scannedHostCount = scannedHostCount
         self.hosts = hosts
-        self.localNetworkDenied = localNetworkDenied
+        self.refusedProbeCount = refusedProbeCount
+        self.firstRefusal = firstRefusal
         self.wasCancelled = wasCancelled
     }
 }
@@ -55,28 +68,25 @@ public struct SweepEngine: Sendable {
         var reports: [HostReport] = []
         var scanned = 0
         var openCount = 0
-        var denied = false
-        var cancelled = false
+        var refused = 0
+        var firstRefusal: String?
 
-        await withTaskGroup(of: HostOutcome.self) { group in
+        await withTaskGroup(of: HostResult.self) { group in
             for _ in 0..<min(concurrency, total) {
                 guard let host = iterator.next() else { break }
                 group.addTask { await sweepHost(host, probe: probe) }
             }
 
-            while let outcome = await group.next() {
-                switch outcome {
-                case .up(let report):
+            while let result = await group.next() {
+                if !result.skipped {
                     scanned += 1
-                    reports.append(report)
-                    openCount += report.openPorts.count
-                case .down:
-                    scanned += 1
-                case .denied:
-                    denied = true
-                case .skipped:
-                    break
+                    if let report = result.report {
+                        reports.append(report)
+                        openCount += report.openPorts.count
+                    }
                 }
+                refused += result.refusedProbes
+                firstRefusal = firstRefusal ?? result.firstRefusal
 
                 progress(
                     ScanProgress(
@@ -87,7 +97,7 @@ public struct SweepEngine: Sendable {
                     )
                 )
 
-                if denied || cancelled || Task.isCancelled {
+                if Task.isCancelled {
                     group.cancelAll()
                     continue
                 }
@@ -97,34 +107,38 @@ public struct SweepEngine: Sendable {
             }
         }
 
-        if Task.isCancelled { cancelled = true }
-
         return SweepResult(
             scannedHostCount: scanned,
             hosts: reports.sorted { $0.address < $1.address },
-            localNetworkDenied: denied,
-            wasCancelled: cancelled
+            refusedProbeCount: refused,
+            firstRefusal: firstRefusal,
+            wasCancelled: Task.isCancelled
         )
     }
 
-    private enum HostOutcome: Sendable {
-        case up(HostReport)
-        case down
-        case denied
-        case skipped
+    private struct HostResult: Sendable {
+        var report: HostReport?
+        var refusedProbes = 0
+        var firstRefusal: String?
+        var skipped = false
     }
 
-    private func sweepHost(_ host: IPv4Address, probe: Probe) async -> HostOutcome {
-        if Task.isCancelled { return .skipped }
+    private func sweepHost(_ host: IPv4Address, probe: Probe) async -> HostResult {
+        if Task.isCancelled { return HostResult(skipped: true) }
 
+        var result = HostResult()
         var probed = Set<UInt16>()
         var open = Set<UInt16>()
         var alive = false
 
         for port in discoveryPorts {
             let outcome = await probe(host, port)
-            if outcome.isPermissionDenied { return .denied }
             probed.insert(port)
+            if case .denied(let detail) = outcome {
+                result.refusedProbes += 1
+                result.firstRefusal = result.firstRefusal ?? "\(host):\(port) \(detail)"
+                continue
+            }
             if outcome == .open { open.insert(port) }
             if outcome.indicatesHostIsUp {
                 alive = true
@@ -132,15 +146,20 @@ public struct SweepEngine: Sendable {
             }
         }
 
-        guard alive else { return .down }
+        guard alive else { return result }
 
         for port in inventoryPorts where !probed.contains(port) {
-            if Task.isCancelled { return .skipped }
+            if Task.isCancelled { return HostResult(skipped: true) }
             let outcome = await probe(host, port)
-            if outcome.isPermissionDenied { return .denied }
+            if case .denied(let detail) = outcome {
+                result.refusedProbes += 1
+                result.firstRefusal = result.firstRefusal ?? "\(host):\(port) \(detail)"
+                continue
+            }
             if outcome == .open { open.insert(port) }
         }
 
-        return .up(HostReport(address: host, openPorts: open.sorted()))
+        result.report = HostReport(address: host, openPorts: open.sorted())
+        return result
     }
 }

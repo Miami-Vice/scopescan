@@ -66,7 +66,7 @@ enum TCPProbe {
             case .ETIMEDOUT:
                 return .timedOut
             case .EPERM, .EACCES:
-                return .denied
+                return .denied("POSIX \(code.rawValue): \(error.localizedDescription)")
             default:
                 break
             }

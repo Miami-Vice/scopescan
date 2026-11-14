@@ -73,23 +73,29 @@ final class SweepEngineTests: XCTestCase {
         XCTAssertLessThanOrEqual(perHost[address("192.168.1.6")] ?? 0, ServiceCatalog.discoveryPorts.count)
     }
 
-    func testLocalNetworkDenialStopsTheSweep() async throws {
+    func testPermissionErrorsAreCountedWithoutStoppingTheSweep() async throws {
         let scope = try ScanScope(cidr: "192.168.1.0/24")
+        let live = address("192.168.1.9")
         let result = await SweepEngine(concurrency: 4).sweep(
             scope: scope,
-            probe: { _, _ in .denied }
+            probe: { host, port in
+                if host == live && port == 80 { return .closed }
+                return .denied("POSIX 1")
+            }
         )
 
+        XCTAssertEqual(result.scannedHostCount, scope.hostCount)
+        XCTAssertEqual(result.hosts.map(\.address), [live])
         XCTAssertTrue(result.localNetworkDenied)
-        XCTAssertTrue(result.hosts.isEmpty)
-        XCTAssertLessThan(result.scannedHostCount, scope.hostCount)
+        XCTAssertGreaterThan(result.refusedProbeCount, 0)
+        XCTAssertNotNil(result.firstRefusal)
     }
 
-    func testDenialIsNotReportedAsUserCancellation() async throws {
+    func testPermissionErrorsAreNotReportedAsUserCancellation() async throws {
         let scope = try ScanScope(cidr: "192.168.1.0/24")
         let result = await SweepEngine(concurrency: 4).sweep(
             scope: scope,
-            probe: { _, _ in .denied }
+            probe: { _, _ in .denied("POSIX 1") }
         )
 
         XCTAssertTrue(result.localNetworkDenied)

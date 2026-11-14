@@ -162,15 +162,21 @@ struct ScanHomeView: View {
     private func resultsSections(_ report: ScanReport) -> some View {
         Section {
             if report.localNetworkDenied {
-                Label {
-                    Text(report.hostsUp == 0
-                         ? "Local Network access was refused. Allow it in Settings → Privacy & Security → Local Network, then scan again."
-                         : "iOS refused some connections with a permission error, so the scan stopped early and is partial. Check Settings → Privacy & Security → Local Network.")
-                        .font(.footnote)
-                } icon: {
-                    Image(systemName: "hand.raised.fill")
+                VStack(alignment: .leading, spacing: 6) {
+                    Label {
+                        Text("iOS refused \(report.refusedProbeCount) connection attempts with a permission error. Those hosts and ports were not checked, so the results are incomplete.")
+                            .font(.footnote)
+                    } icon: {
+                        Image(systemName: "hand.raised.fill")
+                    }
+                    .foregroundStyle(.red)
+
+                    if let first = report.firstRefusal {
+                        Text("First refusal: \(first)")
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                .foregroundStyle(.red)
             }
 
             LabeledContent("Network", value: report.cidr)
